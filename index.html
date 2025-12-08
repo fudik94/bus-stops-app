@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Автобусы по городам</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h1 id="siteTitle" class="mb-0">Автобусы по городам</h1>
+      <div>
+        <select id="langSelect" class="form-select form-select-sm w-auto">
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+          <option value="et">Eesti</option>
+        </select>
+      </div>
+    </div>
+    <!-- Поиск по authority ("город"/уезд) -->
+    <div class="mb-3" id="cityBlock">
+      <label for="cityInput" id="cityLabel" class="form-label">Введите или выберите город/уезд:</label>
+      <input type="text" class="form-control mb-2" id="cityInput" autocomplete="off">
+      <select class="form-select mb-2" id="citySelect"></select>
+      <button class="btn btn-primary" id="chooseCityBtn">Выбрать город</button>
+    </div>
+    <!-- Остановка -->
+    <div class="mb-3">
+      <label for="stopInput" id="stopLabel" class="form-label">Введите или выберите остановку:</label>
+      <input type="text" class="form-control mb-2" id="stopInput" autocomplete="off" disabled>
+      <select class="form-select mb-2" id="stopSelect" disabled></select>
+      <button class="btn btn-primary" id="chooseStopBtn" disabled>Выбрать остановку</button>
+    </div>
+    <div class="mb-3">
+      <button class="btn btn-secondary" id="clearBtn">Очистить всё</button>
+    </div>
+    <div class="mb-3">
+      <h5 id="busesTitle">Бусы на выбранной остановке:</h5>
+      <div id="busesList" class="d-flex flex-wrap gap-2"></div>
+    </div>
+    <div class="mb-3">
+      <h5 id="arrivalsTitle">Ближайшие прибытия:</h5>
+      <ul class="list-group" id="arrivalsList"></ul>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+  <script>
+    const translations = {
+      ru: {
+        siteTitle: "Автобусы по городам",
+        cityLabel: "Введите или выберите город/уезд:",
+        stopLabel: "Введите или выберите остановку:",
+        chooseCity: "Выбрать город",
+        chooseStop: "Выбрать остановку",
+        clearBtn: "Очистить всё",
+        busesTitle: "Бусы на выбранной остановке:",
+        arrivalsTitle: "Ближайшие прибытия:"
+      },
+      en: {
+        siteTitle: "Buses by City",
+        cityLabel: "Enter or choose a city/region:",
+        stopLabel: "Enter or choose a stop:",
+        chooseCity: "Choose city",
+        chooseStop: "Choose stop",
+        clearBtn: "Clear all",
+        busesTitle: "Buses at the selected stop:",
+        arrivalsTitle: "Next arrivals:"
+      },
+      et: {
+        siteTitle: "Bussid linnade kaupa",
+        cityLabel: "Sisesta või vali linn/valla:",
+        stopLabel: "Sisesta või vali peatus:",
+        chooseCity: "Vali linn",
+        chooseStop: "Vali peatus",
+        clearBtn: "Tühjenda kõik",
+        busesTitle: "Bussid valitud peatuses:",
+        arrivalsTitle: "Järgmised saabumised:"
+      }
+    };
+
+    let currentLang = 'ru';
+    let citiesList = [];
+    let stopsList = [];
+    let stopNamesList = [];
+    let stopIdList = [];
+
+    function applyTranslations(lang) {
+      currentLang = lang;
+      $('#siteTitle').text(translations[lang].siteTitle);
+      $('#cityLabel').text(translations[lang].cityLabel);
+      $('#stopLabel').text(translations[lang].stopLabel);
+      $('#chooseCityBtn').text(translations[lang].chooseCity);
+      $('#chooseStopBtn').text(translations[lang].chooseStop);
+      $('#clearBtn').text(translations[lang].clearBtn);
+      $('#busesTitle').text(translations[lang].busesTitle);
+      $('#arrivalsTitle').text(translations[lang].arrivalsTitle);
+    }
+
+    function clearAll() {
+      $('#cityInput').val('');
+      $('#citySelect').val('');
+      $('#stopInput').val('').prop('disabled', true);
+      $('#stopSelect').val('').prop('disabled', true);
+      $('#chooseStopBtn').prop('disabled', true);
+      $('#busesList').empty();
+      $('#arrivalsList').empty();
+      stopNamesList = [];
+      stopIdList = [];
+    }
+
+    $(document).ready(function() {
+      applyTranslations('ru');
+
+      $('#langSelect').change(function() {
+        applyTranslations($(this).val());
+      });
+
+      // --- Загрузка городов ---
+      fetch('/cities')
+      .then(response => response.json())
+      .then(cities => {
+        citiesList = cities;
+        $('#citySelect').html('<option value="">—</option>');
+        cities.forEach(c => {
+          $('#citySelect').append(`<option value="${c}">${c}</option>`);
+        });
+        $('#cityInput').autocomplete({ source: cities });
+      });
+
+      // --- Кнопка выбора города ---
+      $('#chooseCityBtn').click(function() {
+        let city = $('#cityInput').val();
+        if (!city) city = $('#citySelect').val();
+        if (!city || city === '') return alert(translations[currentLang].cityLabel);
+        $('#stopInput').val('').prop('disabled', false);
+        $('#stopSelect').html('').prop('disabled', true);
+        $('#chooseStopBtn').prop('disabled', true);
+        $('#busesList').empty();
+        $('#arrivalsList').empty();
+
+        fetch(`/stops_by_city?city_name=${encodeURIComponent(city)}`)
+        .then(r => r.json())
+        .then(stops => {
+          stopsList = stops;
+          stopNamesList = stops.map(s => s.stop_name);
+          stopIdList = stops.map(s => s.stop_id);
+          $('#stopInput').autocomplete({ source: stopNamesList });
+          $('#stopSelect').html('<option value="">—</option>');
+          stops.forEach(s => {
+            $('#stopSelect').append(`<option value="${s.stop_id}">${s.stop_name}</option>`);
+          });
+          $('#stopSelect').prop('disabled', false);
+          $('#chooseStopBtn').prop('disabled', false);
+        });
+      });
+
+      // Кнопка очистки
+      $('#clearBtn').click(() => {
+        clearAll();
+      });
+
+      // Кнопка выбора остановки
+      $('#chooseStopBtn').click(function() {
+        let stopName = $('#stopInput').val();
+        let stopId = $('#stopSelect').val();
+
+        if (stopName) {
+          const idx = stopNamesList.indexOf(stopName);
+          if (idx >= 0) stopId = stopIdList[idx];
+        }
+        if (!stopId || stopId === '') return alert(translations[currentLang].stopLabel);
+
+        $('#busesList').empty();
+        $('#arrivalsList').empty();
+
+        fetch(`/buses?stop_id=${encodeURIComponent(stopId)}`)
+        .then(r => r.json())
+        .then(buses => {
+          $('#busesList').empty();
+          buses.forEach(bus => {
+            const btn = $(`<button class="btn btn-outline-primary mb-2">${bus}</button>`);
+            btn.click(function() {
+              fetch(`/arrivals?stop_id=${encodeURIComponent(stopId)}&bus_number=${encodeURIComponent(bus)}`)
+                .then(r => r.json())
+                .then(arrivals => {
+                  $('#arrivalsList').html('');
+                  arrivals.forEach(time => {
+                    $('#arrivalsList').append(`<li class="list-group-item">${time}</li>`);
+                  });
+                });
+            });
+            $('#busesList').append(btn);
+          });
+        });
+      });
+
+      // Автовыбор из селекта (город/остановка)
+      $('#citySelect').change(function() {
+        $('#cityInput').val($(this).val());
+      });
+      $('#stopSelect').change(function() {
+        $('#stopInput').val($(this).find('option:selected').text());
+      });
+    });
+  </script>
+</body>
+</html>
