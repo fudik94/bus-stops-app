@@ -9,11 +9,12 @@ app.use(express.static(path.join(__dirname)));
 
 // Настройки подключения к MySQL:
 const connection = mysql.createConnection({
-  host: 'd26893.mysql.zonevs.eu',
-  user: 'd26893_busstops',
-  password: '3w7PYquFJhver0!KdOfF',
-  database: 'd26893_busstops'
+  host: process.env.HOST,
+  user: process.env.USER,
+  password: process.env.PASSWORD,
+  database: process.env.DATABASE
 });
+
 
 // Получить все районы
 app.get('/zones', (req, res) => {
@@ -108,4 +109,5 @@ app.get('/arrivals', (req, res) => {
 // Запуск сервера — ДОЛЖЕН БЫТЬ В КОНЦЕ!
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
+
 });
