@@ -1,3 +1,4 @@
+//это чисто академический проект не осуждайте корявый код
 const express = require('express');
 const mysql = require('mysql2');
 
@@ -9,12 +10,11 @@ app.use(express.static(path.join(__dirname)));
 
 // Настройки подключения к MySQL:
 const connection = mysql.createConnection({
-  host: process.env.HOST,
-  user: process.env.USER,
-  password: process.env.PASSWORD,
-  database: process.env.DATABASE
+  host: 'd26893.mysql.zonevs.eu',
+  user: 'd26893_busstops',
+  password: '3w7PYquFJhver0!KdOfF',
+  database: 'd26893_busstops'
 });
-
 
 // Получить все районы
 app.get('/zones', (req, res) => {
@@ -106,8 +106,18 @@ app.get('/arrivals', (req, res) => {
   );
 });
 
-// Запуск сервера — ДОЛЖЕН БЫТЬ В КОНЦЕ!
+// Новый эндпоинт: получить все остановки с координатами и authority
+app.get('/all_stops', (req, res) => {
+  connection.query(
+    'SELECT stop_id, stop_name, stop_lat, stop_lon, authority FROM fuad_stops WHERE stop_lat IS NOT NULL AND stop_lon IS NOT NULL',
+    (error, results) => {
+      if (error) return res.status(500).send('Ошибка при запросе к базе данных');
+      res.json(results);
+    }
+  );
+});
+
+// Запуск сервера 
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
-
 });
