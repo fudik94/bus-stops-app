@@ -18,6 +18,11 @@
         </select>
       </div>
     </div>
+    <!-- Новая кнопка для геолокации -->
+    <div class="mb-2">
+      <button class="btn btn-success" id="detectLocationBtn">Определить моё местоположение</button>
+      <span id="locationResult" class="ms-2"></span>
+    </div>
     <!-- Поиск по authority ("город"/уезд) -->
     <div class="mb-3" id="cityBlock">
       <label for="cityInput" id="cityLabel" class="form-label">Введите или выберите город/уезд:</label>
@@ -57,7 +62,10 @@
         chooseStop: "Выбрать остановку",
         clearBtn: "Очистить всё",
         busesTitle: "Бусы на выбранной остановке:",
-        arrivalsTitle: "Ближайшие прибытия:"
+        arrivalsTitle: "Ближайшие прибытия:",
+        detectLocationBtn: "Определить моё местоположение",
+        locationFound: (city, stop) => `Ваш город: ${city}, ближайшая остановка: ${stop}`,
+        locationFail: "Не удалось определить местоположение."
       },
       en: {
         siteTitle: "Buses by City",
@@ -67,7 +75,10 @@
         chooseStop: "Choose stop",
         clearBtn: "Clear all",
         busesTitle: "Buses at the selected stop:",
-        arrivalsTitle: "Next arrivals:"
+        arrivalsTitle: "Next arrivals:",
+        detectLocationBtn: "Detect my location",
+        locationFound: (city, stop) => `Your city: ${city}, nearest stop: ${stop}`,
+        locationFail: "Failed to detect location."
       },
       et: {
         siteTitle: "Bussid linnade kaupa",
@@ -77,7 +88,10 @@
         chooseStop: "Vali peatus",
         clearBtn: "Tühjenda kõik",
         busesTitle: "Bussid valitud peatuses:",
-        arrivalsTitle: "Järgmised saabumised:"
+        arrivalsTitle: "Järgmised saabumised:",
+        detectLocationBtn: "Määra minu asukoht",
+        locationFound: (city, stop) => `Teie linn: ${city}, lähim peatus: ${stop}`,
+        locationFail: "Asukoha määramine ebaõnnestus."
       }
     };
 
@@ -97,6 +111,7 @@
       $('#clearBtn').text(translations[lang].clearBtn);
       $('#busesTitle').text(translations[lang].busesTitle);
       $('#arrivalsTitle').text(translations[lang].arrivalsTitle);
+      $('#detectLocationBtn').text(translations[lang].detectLocationBtn);
     }
 
     function clearAll() {
@@ -109,6 +124,7 @@
       $('#arrivalsList').empty();
       stopNamesList = [];
       stopIdList = [];
+      $('#locationResult').text('');
     }
 
     $(document).ready(function() {
@@ -204,6 +220,80 @@
       $('#stopSelect').change(function() {
         $('#stopInput').val($(this).find('option:selected').text());
       });
+
+      // --- Новая кнопка: Определить местоположение ---
+      $('#detectLocationBtn').click(async function() {
+        if (!("geolocation" in navigator)) {
+          alert(translations[currentLang].locationFail);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const userLat = position.coords.latitude;
+          const userLon = position.coords.longitude;
+
+          // Получить ВСЕ остановки с координатами
+          const stopsResp = await fetch("/all_stops");
+          const stops = await stopsResp.json();
+
+          // Функция поиска ближайшей остановки
+          function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          }
+
+          let nearestStop = stops[0];
+          let minDist = getDistance(userLat, userLon, stops[0].stop_lat, stops[0].stop_lon);
+
+          stops.forEach(stop => {
+            const dist = getDistance(userLat, userLon, stop.stop_lat, stop.stop_lon);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestStop = stop;
+            }
+          });
+
+          // Автоматически заполним поля города
+          $('#cityInput').val(nearestStop.authority || "");
+          $('#citySelect').val(nearestStop.authority || "");
+
+          // Теперь загружаем остановки для этого города
+          fetch(`/stops_by_city?city_name=${encodeURIComponent(nearestStop.authority)}`)
+          .then(r => r.json())
+          .then(stopsByCity => {
+            stopNamesList = stopsByCity.map(s => s.stop_name);
+            stopIdList = stopsByCity.map(s => s.stop_id);
+
+            // Пробуем найти соответствующую остановку
+            let foundStop = stopsByCity.find(s => s.stop_name === nearestStop.stop_name);
+            let stopInputValue = foundStop ? foundStop.stop_name : stopsByCity[0]?.stop_name || "";
+            let stopSelectValue = foundStop ? foundStop.stop_id : stopsByCity[0]?.stop_id || "";
+
+            $('#stopInput').val(stopInputValue).prop('disabled', false);
+            $('#stopSelect').html('<option value="">—</option>');
+            stopsByCity.forEach(s => {
+              $('#stopSelect').append(`<option value="${s.stop_id}"${s.stop_id === stopSelectValue ? " selected" : ""}>${s.stop_name}</option>`);
+            });
+            $('#stopSelect').prop('disabled', false);
+            $('#chooseStopBtn').prop('disabled', false);
+
+            // Если ближайшая остановка найдена, сразу "выбрать" остановку
+            if (foundStop) {
+              $('#chooseStopBtn').click();
+            }
+          });
+
+          $('#locationResult').text(translations[currentLang].locationFound(nearestStop.authority || "", nearestStop.stop_name || ""));
+
+        }, (error) => {
+          $('#locationResult').text(translations[currentLang].locationFail + ' ' + error.message);
+        });
+      });
+
     });
   </script>
 </body>
